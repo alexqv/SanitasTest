@@ -86,6 +86,35 @@ public class RealizarSimulacion {
 
     private static final String SEPARADOR_TIER = "#";
 
+    DatosContratacionPlan oDatosPlan;
+	List< String > lExcepciones;
+
+    List< List< PrimasPorProducto > > primasDesglosadas;
+    List< Primas > primas;
+    
+    Double[] descuentosTotales;
+    Double[] pagoTotal;
+    Double[] precioConPromocion;
+    
+    List< List< PromocionAplicada > > promociones;
+    List< List< es.sanitas.soporte.Recibo > > recibos;
+
+    @SuppressWarnings("unchecked")
+	private void inicializarObjetosDeCalculo(final Map< String, Object > hmValores) {
+	    oDatosPlan = ( DatosContratacionPlan ) hmValores.get( StaticVarsContratacion.DATOS_PLAN );
+		lExcepciones = ( List< String > ) hmValores.get( "EXCEPCIONES" );
+	
+	    primasDesglosadas = new ArrayList< List< PrimasPorProducto > >();
+	    primas = new ArrayList< Primas >();
+	    
+	    descuentosTotales = new Double[] { 0.0, 0.0, 0.0, 0.0 };
+	    pagoTotal = new Double[] { 0.0, 0.0, 0.0, 0.0 };
+	    precioConPromocion = new Double[] { 0.0, 0.0, 0.0, 0.0 };
+	    
+	    promociones = new ArrayList< List< PromocionAplicada > >();
+	    recibos = new ArrayList< List< es.sanitas.soporte.Recibo > >();
+    }
+
     /**
      * Método que realiza las llamadas a las diferentes clases de simulación, para tarificar
      *
@@ -102,48 +131,229 @@ public class RealizarSimulacion {
      *             Excepción controlada
      */
     public Map< String, Object > realizarSimulacion( final DatosAlta oDatosAlta,
-            final List< ProductoPolizas > lProductos, final List< BeneficiarioPolizas > lBeneficiarios,
-            final boolean desglosar, final Map< String, Object > hmValores )
-            throws Exception, ExcepcionContratacion {
+            										 final List< ProductoPolizas > lProductos, 
+            										 final List< BeneficiarioPolizas > lBeneficiarios,
+            										 final boolean desglosar, 
+            										 final Map< String, Object > hmValores ) throws Exception, ExcepcionContratacion {
+    	inicializarObjetosDeCalculo(hmValores);
 
-        final Map< String, Object > hmSimulacion = new HashMap< String, Object >();
-        @SuppressWarnings( "unchecked" ) final List< String > lExcepciones = ( List< String > )hmValores
-                .get( "EXCEPCIONES" );
-        final DatosContratacionPlan oDatosPlan = ( DatosContratacionPlan )hmValores
-                .get( StaticVarsContratacion.DATOS_PLAN );
+        Set<FrecuenciaEnum> frecuenciasTarificar = calcularFrecuenciasTarificar(oDatosAlta, lBeneficiarios, hmValores);
 
-        final List< Primas > primas = new ArrayList< Primas >();
-        final Double descuentosTotales[] = { 0.0, 0.0, 0.0, 0.0 };
-        final Double pagoTotal[] = { 0.0, 0.0, 0.0, 0.0 };
-        final Double precioConPromocion[] = { 0.0, 0.0, 0.0, 0.0 };
-        final List< List< PrimasPorProducto > > primasDesglosadas = new ArrayList< List< PrimasPorProducto > >();
-        final List< List< PromocionAplicada > > promociones = new ArrayList< List< PromocionAplicada > >();
-        final List< List< es.sanitas.soporte.Recibo > > recibos = new ArrayList< List< es.sanitas.soporte.Recibo > >();
-        final List< String > errores = new ArrayList< String >();
+        final TarificacionPoliza retornoPoliza = calcularRetornoPoliza(oDatosAlta, lProductos, lBeneficiarios, hmValores, frecuenciasTarificar);
 
-        Set< FrecuenciaEnum > frecuenciasTarificar = EnumSet.noneOf( FrecuenciaEnum.class );
-        if( hmValores.containsKey( StaticVarsContratacion.FREC_MENSUAL ) ) {
-            frecuenciasTarificar.clear();
-            frecuenciasTarificar.add( FrecuenciaEnum.MENSUAL );
-        }
-        if( lBeneficiarios != null ) {
-            frecuenciasTarificar.clear();
-            frecuenciasTarificar
-                    .add( FrecuenciaEnum.obtenerFrecuencia( oDatosAlta.getGenFrecuenciaPago() ) );
-        }
-        if( frecuenciasTarificar.isEmpty() ) {
-            frecuenciasTarificar = EnumSet.allOf( FrecuenciaEnum.class );
-        }
+        List< String > errores = ejecutarSimulacion(oDatosAlta, frecuenciasTarificar, retornoPoliza);
 
-        final Collection< Callable< TarificacionPoliza > > solvers = new ArrayList< Callable< TarificacionPoliza > >(
-                0 );
-        for( final FrecuenciaEnum frecuencia : frecuenciasTarificar ) {
-            solvers.add( simularPolizaFrecuencia( hmValores, oDatosAlta, lProductos, lBeneficiarios,
-                    frecuencia ) );
+        return generarResultadosSimulacion(desglosar, errores);
+    }
+
+	private Map<String, Object> generarResultadosSimulacion(final boolean desglosar, final List<String> errores) {
+		final Map< String, Object > hmSimulacion = new HashMap< String, Object >();
+        
+        hmSimulacion.put( StaticVarsContratacion.PRIMAS_SIMULACION, primas );
+        hmSimulacion.put( StaticVarsContratacion.PRIMAS_SIMULACION_DESGLOSE, primasDesglosadas );
+        hmSimulacion.put( StaticVarsContratacion.SIMULACION_PROVINCIA, "Madrid" );
+        hmSimulacion.put( StaticVarsContratacion.HAY_DESGLOSE, desglosar );
+        hmSimulacion.put( StaticVarsContratacion.DESCUENTOS_TOTALES, descuentosTotales );
+        hmSimulacion.put( StaticVarsContratacion.TOTAL_ASEGURADOS, primas );
+        hmSimulacion.put( StaticVarsContratacion.PROMOCIONES_SIMULACION, promociones );
+        hmSimulacion.put( StaticVarsContratacion.RECIBOS_SIMULACION, recibos );
+        hmSimulacion.put( StaticVarsContratacion.PAGO_TOTAL, pagoTotal );
+        hmSimulacion.put( StaticVarsContratacion.ERROR, errores );
+
+        // Si en la simulación hay apliacada alguna promoción
+        // de descuento sobre la prima
+        if( hayPromocionDescuento( promociones ) ) {
+            hmSimulacion.put( StaticVarsContratacion.PAGO_TOTAL, precioConPromocion );
+            hmSimulacion.put( StaticVarsContratacion.PRECIOS_SIN_PROMOCION_SIMULACION, pagoTotal );
         }
-        final CompletionService< TarificacionPoliza > ecs = new ExecutorCompletionService< TarificacionPoliza >(
-                pool );
+		return hmSimulacion;
+	}
+
+	private List<String> ejecutarSimulacion(final DatosAlta oDatosAlta,
+											Set<FrecuenciaEnum> frecuenciasTarificar, 
+											final TarificacionPoliza retornoPoliza) {
+		
+        List< String > errores = new ArrayList< String >();
+        
+		for( final FrecuenciaEnum frecuencia : frecuenciasTarificar ) {
+            final Tarificacion retorno = validarTarificacionPoliza(retornoPoliza, errores);
+
+            int contadorBeneficiario = 0;
+            double css = 0;
+            
+            for( final TarifaBeneficiario tarifaBeneficiario : retorno.getTarifas().getTarifaBeneficiarios() ) {
+                List< PrimasPorProducto > listaProductoPorAseg = new ArrayList< PrimasPorProducto >();
+                
+                listaProductoPorAseg = procesarPrimasDesglosadas(primasDesglosadas, contadorBeneficiario, listaProductoPorAseg);
+                procesarPrimas(primas, contadorBeneficiario);
+
+                int contadorProducto = 0;
+                
+                for( final TarifaProducto tarifaProducto : tarifaBeneficiario.getTarifasProductos() ) {
+                    if( comprobarPromocionAplica(oDatosAlta, lExcepciones, tarifaProducto) ) {
+                        css = aplicarPromocion(oDatosPlan, descuentosTotales, pagoTotal, frecuencia, css, listaProductoPorAseg, contadorProducto, tarifaProducto);
+                    }
+                    
+                    contadorProducto++;
+                }
+                
+                contadorBeneficiario++;
+            }
+
+            // Promociones aplicadas a la simulación
+            promociones.add( recuperarPromocionesAgrupadas( retorno.getPromociones().getListaPromocionesPoliza(), contadorBeneficiario ) );
+
+            procesarRecibosPrimerAño(precioConPromocion, recibos, frecuencia, retorno, css);
+        }
+		
+		return errores;
+	}
+
+	private void procesarRecibosPrimerAño(Double[] precioConPromocion, 
+										  List<List<es.sanitas.soporte.Recibo>> recibos,
+										  final FrecuenciaEnum frecuencia, 
+										  final Tarificacion retorno, 
+										  double css) {
+		
+		// Lista de recibos del primer año
+		if( retorno.getRecibos() != null ) {
+		    recibos.add( toReciboList( retorno.getRecibos().getListaRecibosProductos() ) );
+
+		    // Se calcula el precio total con promoción
+		    // Es el importe del primer recibo sin el impuesto del consorcio
+		    precioConPromocion[ frecuencia.getValor() - 1 ] = retorno.getRecibos().getReciboPoliza().getRecibos()[ 0 ].getImporte() - css;
+		}
+	}
+
+	private double aplicarPromocion(final DatosContratacionPlan oDatosPlan, Double[] descuentosTotales,
+			Double[] pagoTotal, final FrecuenciaEnum frecuencia, double css,
+			List<PrimasPorProducto> listaProductoPorAseg, int contadorProducto, final TarifaProducto tarifaProducto) {
+		PrimasPorProducto oPrimasProducto = new PrimasPorProducto();
+		if( listaProductoPorAseg.size() > contadorProducto ) {
+		    oPrimasProducto = listaProductoPorAseg.get( contadorProducto );
+		} else {
+		    oPrimasProducto
+		            .setCodigoProducto( tarifaProducto.getIdProducto().intValue() );
+		    oPrimasProducto.setNombreProducto( tarifaProducto.getDescripcion() );
+		    final DatosPlanProducto producto = getDatosProducto( oDatosPlan,
+		            tarifaProducto.getIdProducto() );
+		    if( producto != null ) {
+		        oPrimasProducto
+		                .setObligatorio( producto.isSwObligatorio() ? "S" : "N" );
+		        oPrimasProducto.setNombreProducto( producto.getDescComercial() );
+		    }
+		    listaProductoPorAseg.add( oPrimasProducto );
+		}
+
+		final TarifaDesglosada tarifaDesglosada = tarifaProducto.getTarifaDesglosada();
+		final Primas primaProducto = oPrimasProducto.getPrimaProducto();
+
+		// Se calcula el CSS total para poder calcular el precio con promoción
+		css += tarifaDesglosada.getCss();
+
+		/**
+		 * No sumamos tarifaDesglosada.getCss() + tarifaDesglosada.getCssre() porque
+		 * la Compensación del Consorcio de Seguros sólo se aplica en la primera
+		 * mensualidad. Y queremos mostrar al usuario el precio de todos los meses.
+		 */
+		final double pago = tarifaDesglosada.getPrima() + tarifaDesglosada.getISPrima();
+		final double descuento = tarifaDesglosada.getDescuento();
+		switch( frecuencia.getValor() ) {
+		case 1:
+		    // Mensual
+		    primaProducto.setPrima( "" + descuento );
+		    break;
+		case 2:
+		    // Trimestral
+		    primaProducto.setPrima( "" + descuento );
+		    break;
+		case 3:
+		    // Semestral
+		    primaProducto.setPrima( "" + descuento*2 );
+		    break;
+		case 4:
+		    // Anual
+		    primaProducto.setPrima( "" + descuento*2 );
+		    break;
+		}
+		descuentosTotales[ frecuencia.getValor() - 1 ] += tarifaDesglosada
+		        .getDescuento();
+		pagoTotal[ frecuencia.getValor() - 1 ] += pago
+		        + tarifaDesglosada.getDescuento();
+		return css;
+	}
+
+	private boolean comprobarPromocionAplica(final DatosAlta oDatosAlta, 
+											 final List<String> lExcepciones,
+										 	 final TarifaProducto tarifaProducto) {
+		
+		return (tarifaProducto.getIdProducto() != 389
+		        || !listaContiene(lExcepciones, StaticVarsContratacion.PROMO_ECI_COLECTIVOS )
+		        || hayTarjetas( oDatosAlta )) 
+				&& tarifaProducto.getIdProducto() != 670
+		        || !listaContiene(lExcepciones, StaticVarsContratacion.PROMO_FARMACIA )
+		        || hayTarjetas( oDatosAlta );
+	}
+
+	private void procesarPrimas(List<Primas> primas, int contadorBeneficiario) {
+		if( primas.size() <= contadorBeneficiario ) {
+		    primas.add( new Primas() );
+		}
+	}
+
+	private List<PrimasPorProducto> procesarPrimasDesglosadas(List<List<PrimasPorProducto>> primasDesglosadas,
+															  int contadorBeneficiario, 
+															  List<PrimasPorProducto> listaProductoPorAseg) {
+		
+		if( primasDesglosadas.size() > contadorBeneficiario ) {
+		    listaProductoPorAseg = primasDesglosadas.get( contadorBeneficiario );
+		} else {
+		    primasDesglosadas.add( listaProductoPorAseg );
+		}
+		
+		return listaProductoPorAseg;
+	}
+
+	private Tarificacion validarTarificacionPoliza(final TarificacionPoliza retornoPoliza, final List<String> errores) {
+		final Tarificacion retorno = retornoPoliza.getTarificacion();
+		final String codigoError = retornoPoliza.getCodigoError();
+		
+		if( codigoError != null && !StringUtils.isEmpty( codigoError ) ) {
+		    errores.add( codigoError );
+		}
+		
+		return retorno;
+	}
+
+	private TarificacionPoliza calcularRetornoPoliza(final DatosAlta oDatosAlta,
+													 final List<ProductoPolizas> lProductos, 
+													 final List<BeneficiarioPolizas> lBeneficiarios,
+													 final Map<String, Object> hmValores, 
+													 Set<FrecuenciaEnum> frecuenciasTarificar) throws ExcepcionContratacion {
+		
+        Collection<Callable<TarificacionPoliza>> solvers = calcularSolvers(oDatosAlta, lProductos, lBeneficiarios, hmValores, frecuenciasTarificar);
+        final List<TarificacionPoliza> resultadoSimulaciones = calcularResultadoSimulaciones(solvers);
+
+		Predicate< TarificacionPoliza > predicate = new Predicate< TarificacionPoliza >() {
+            public boolean evaluate( final TarificacionPoliza object ) {
+                return object != null && object.getTarificacion() != null;
+            }
+        };
+        
+		final TarificacionPoliza retornoPoliza = IterableUtils.find( resultadoSimulaciones, predicate );
+
+		if( retornoPoliza == null ) {
+		    throw new ExcepcionContratacion( "No se ha podido obtener un precio para el presupuesto. Por favor, inténtelo de nuevo más tarde." );
+		}
+		
+		return retornoPoliza;
+	}
+
+	private List<TarificacionPoliza> calcularResultadoSimulaciones(Collection<Callable<TarificacionPoliza>> solvers) throws ExcepcionContratacion {
+		final CompletionService< TarificacionPoliza > ecs = new ExecutorCompletionService< TarificacionPoliza >( pool );
+		
         int n = 0;
+        
         for( final Callable< TarificacionPoliza > s : solvers ) {
             try {
                 ecs.submit( s );
@@ -152,8 +362,10 @@ public class RealizarSimulacion {
                 LOG.error( "RejectedExecutionException con el metodo " + s.toString(), ree );
             }
         }
+        
         final List< TarificacionPoliza > resultadoSimulaciones = new ArrayList< TarificacionPoliza >();
         final List< ExecutionException > resultadoExcepciones = new ArrayList< ExecutionException >();
+        
         for( int i = 0; i < n; ++i ) {
             try {
                 final Future< TarificacionPoliza > future = ecs.poll( TIMEOUT, TimeUnit.SECONDS );
@@ -175,148 +387,47 @@ public class RealizarSimulacion {
             throw new ExcepcionContratacion(
                     resultadoExcepciones.get( 0 ).getCause().getMessage() );
         }
+        
+		return resultadoSimulaciones;
+	}
 
+	private Collection<Callable<TarificacionPoliza>> calcularSolvers(final DatosAlta oDatosAlta,
+																	 final List<ProductoPolizas> lProductos, 
+																	 final List<BeneficiarioPolizas> lBeneficiarios,
+																	 final Map<String, Object> hmValores, 
+																	 Set<FrecuenciaEnum> frecuenciasTarificar) {
+		
+		Collection< Callable< TarificacionPoliza > > solvers = new ArrayList< Callable< TarificacionPoliza > >();
+        
         for( final FrecuenciaEnum frecuencia : frecuenciasTarificar ) {
-            final TarificacionPoliza retornoPoliza = IterableUtils.find( resultadoSimulaciones,
-                    new Predicate< TarificacionPoliza >() {
-
-                        public boolean evaluate( final TarificacionPoliza object ) {
-                            return object != null && object.getTarificacion() != null;
-                        }
-                    } );
-
-            if( retornoPoliza == null ) {
-                throw new ExcepcionContratacion(
-                        "No se ha podido obtener un precio para el presupuesto. Por favor, inténtelo de nuevo más tarde." );
-            }
-            final Tarificacion retorno = retornoPoliza.getTarificacion();
-            final String codigoError = retornoPoliza.getCodigoError();
-            if( codigoError != null && !StringUtils.isEmpty( codigoError ) ) {
-                errores.add( codigoError );
-            }
-
-            int contadorBeneficiario = 0;
-            double css = 0;
-            for( final TarifaBeneficiario tarifaBeneficiario : retorno.getTarifas()
-                    .getTarifaBeneficiarios() ) {
-                List< PrimasPorProducto > listaProductoPorAseg = new ArrayList< PrimasPorProducto >();
-                if( primasDesglosadas.size() > contadorBeneficiario ) {
-                    listaProductoPorAseg = primasDesglosadas.get( contadorBeneficiario );
-                } else {
-                    primasDesglosadas.add( listaProductoPorAseg );
-                }
-
-                Primas primaAsegurado = new Primas();
-                if( primas.size() > contadorBeneficiario ) {
-                    primaAsegurado = primas.get( contadorBeneficiario );
-                } else {
-                    primas.add( primaAsegurado );
-                }
-
-                int contadorProducto = 0;
-                for( final TarifaProducto tarifaProducto : tarifaBeneficiario.getTarifasProductos() ) {
-
-                    if( ( tarifaProducto.getIdProducto() != 389
-                            || !comprobarExcepcion( lExcepciones,
-                                    StaticVarsContratacion.PROMO_ECI_COLECTIVOS )
-                            || hayTarjetas( oDatosAlta ) ) && tarifaProducto.getIdProducto() != 670
-                            || !comprobarExcepcion( lExcepciones,
-                                    StaticVarsContratacion.PROMO_FARMACIA )
-                            || hayTarjetas( oDatosAlta ) ) {
-
-                        PrimasPorProducto oPrimasProducto = new PrimasPorProducto();
-                        if( listaProductoPorAseg.size() > contadorProducto ) {
-                            oPrimasProducto = listaProductoPorAseg.get( contadorProducto );
-                        } else {
-                            oPrimasProducto
-                                    .setCodigoProducto( tarifaProducto.getIdProducto().intValue() );
-                            oPrimasProducto.setNombreProducto( tarifaProducto.getDescripcion() );
-                            final DatosPlanProducto producto = getDatosProducto( oDatosPlan,
-                                    tarifaProducto.getIdProducto() );
-                            if( producto != null ) {
-                                oPrimasProducto
-                                        .setObligatorio( producto.isSwObligatorio() ? "S" : "N" );
-                                oPrimasProducto.setNombreProducto( producto.getDescComercial() );
-                            }
-                            listaProductoPorAseg.add( oPrimasProducto );
-                        }
-
-                        final TarifaDesglosada tarifaDesglosada = tarifaProducto.getTarifaDesglosada();
-                        final Primas primaProducto = oPrimasProducto.getPrimaProducto();
-
-                        // Se calcula el CSS total para poder calcular el precio con promoción
-                        css += tarifaDesglosada.getCss();
-
-                        /**
-                         * No sumamos tarifaDesglosada.getCss() + tarifaDesglosada.getCssre() porque
-                         * la Compensación del Consorcio de Seguros sólo se aplica en la primera
-                         * mensualidad. Y queremos mostrar al usuario el precio de todos los meses.
-                         */
-                        final double pago = tarifaDesglosada.getPrima() + tarifaDesglosada.getISPrima();
-                        final double descuento = tarifaDesglosada.getDescuento();
-                        switch( frecuencia.getValor() ) {
-                        case 1:
-                            // Mensual
-                            primaProducto.setPrima( "" + descuento );
-                            break;
-                        case 2:
-                            // Trimestral
-                            primaProducto.setPrima( "" + descuento );
-                            break;
-                        case 3:
-                            // Semestral
-                            primaProducto.setPrima( "" + descuento*2 );
-                            break;
-                        case 4:
-                            // Anual
-                            primaProducto.setPrima( "" + descuento*2 );
-                            break;
-                        }
-                        descuentosTotales[ frecuencia.getValor() - 1 ] += tarifaDesglosada
-                                .getDescuento();
-                        pagoTotal[ frecuencia.getValor() - 1 ] += pago
-                                + tarifaDesglosada.getDescuento();
-
-                    }
-                    contadorProducto++;
-                }
-                contadorBeneficiario++;
-            }
-
-            // Promociones aplicadas a la simulación
-            promociones.add( recuperarPromocionesAgrupadas( retorno.getPromociones().getListaPromocionesPoliza(),
-                    contadorBeneficiario ) );
-
-            // Lista de recibos del primer año
-            if( retorno.getRecibos() != null ) {
-                recibos.add( toReciboList( retorno.getRecibos().getListaRecibosProductos() ) );
-
-                // Se calcula el precio total con promoción
-                // Es el importe del primer recibo sin el impuesto del consorcio
-                precioConPromocion[ frecuencia.getValor()
-                        - 1 ] = retorno.getRecibos().getReciboPoliza().getRecibos()[ 0 ].getImporte() - css;
-            }
+            solvers.add( simularPolizaFrecuencia( hmValores, oDatosAlta, lProductos, lBeneficiarios,  frecuencia ) );
         }
+        
+		return solvers;
+	}
 
-        hmSimulacion.put( StaticVarsContratacion.PRIMAS_SIMULACION, primas );
-        hmSimulacion.put( StaticVarsContratacion.PRIMAS_SIMULACION_DESGLOSE, primasDesglosadas );
-        hmSimulacion.put( StaticVarsContratacion.SIMULACION_PROVINCIA, "Madrid" );
-        hmSimulacion.put( StaticVarsContratacion.HAY_DESGLOSE, desglosar );
-        hmSimulacion.put( StaticVarsContratacion.DESCUENTOS_TOTALES, descuentosTotales );
-        hmSimulacion.put( StaticVarsContratacion.TOTAL_ASEGURADOS, primas );
-        hmSimulacion.put( StaticVarsContratacion.PROMOCIONES_SIMULACION, promociones );
-        hmSimulacion.put( StaticVarsContratacion.RECIBOS_SIMULACION, recibos );
-        hmSimulacion.put( StaticVarsContratacion.PAGO_TOTAL, pagoTotal );
-        hmSimulacion.put( StaticVarsContratacion.ERROR, errores );
-
-        // Si en la simulación hay apliacada alguna promoción
-        // de descuento sobre la prima
-        if( hayPromocionDescuento( promociones ) ) {
-            hmSimulacion.put( StaticVarsContratacion.PAGO_TOTAL, precioConPromocion );
-            hmSimulacion.put( StaticVarsContratacion.PRECIOS_SIN_PROMOCION_SIMULACION, pagoTotal );
+	private Set<FrecuenciaEnum> calcularFrecuenciasTarificar(final DatosAlta oDatosAlta,
+															 final List<BeneficiarioPolizas> lBeneficiarios, 
+															 final Map<String, Object> hmValores) {
+		
+		Set< FrecuenciaEnum > frecuenciasTarificar = EnumSet.noneOf( FrecuenciaEnum.class );
+		
+        if( hmValores.containsKey( StaticVarsContratacion.FREC_MENSUAL ) ) {
+            frecuenciasTarificar.clear();
+            frecuenciasTarificar.add( FrecuenciaEnum.MENSUAL );
         }
-        return hmSimulacion;
-    }
+        
+        if( lBeneficiarios != null ) {
+            frecuenciasTarificar.clear();
+            frecuenciasTarificar.add( FrecuenciaEnum.obtenerFrecuencia( oDatosAlta.getGenFrecuenciaPago() ) );
+        }
+        
+        if( frecuenciasTarificar.isEmpty() ) {
+            frecuenciasTarificar = EnumSet.allOf( FrecuenciaEnum.class );
+        }
+        
+		return frecuenciasTarificar;
+	}
 
     private Callable< TarificacionPoliza > simularPolizaFrecuencia(
             final Map< String, Object > hmValores, final DatosAlta oDatosAlta,
@@ -913,19 +1024,14 @@ public class RealizarSimulacion {
     /**
      * Comprueba si pertenece la excepcion a la lista.
      *
-     * @param lExcepciones
+     * @param lista
      *            Lista de excepciones.
-     * @param comprobar
+     * @param elemento
      *            Dato a comprobar.
      * @return True si pertenece false en caso contrario.
      */
-    public static boolean comprobarExcepcion( final List<String> lExcepciones, final String comprobar ) {
-        LOG.debug( "Se va a comprobar si " + comprobar + " estÃ¡ en la lista " + lExcepciones );
-        boolean bExcepcion = false;
-        if( comprobar != null && lExcepciones != null && lExcepciones.contains( comprobar ) ) {
-            bExcepcion = true;
-        }
-        return bExcepcion;
+    public static boolean listaContiene(List<String> lista, final String elemento ) {
+        LOG.debug( "Se va a comprobar si " + elemento + " estÃ¡ en la lista " + lista );
+        return elemento != null && lista != null && lista.contains(elemento);
     }
-
 }
