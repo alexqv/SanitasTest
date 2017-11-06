@@ -74,8 +74,8 @@ public class RealizarSimulacion {
 	
     private static final Logger LOG = LoggerFactory.getLogger( RealizarSimulacion.class );
 
-	private static final String LINE_BREAK = "<br/>";
     private static final String DATE_FORMAT = "dd/MM/yyyy";
+    private static final String LINE_BREAK = "<br/>";
 
     private static final int NUMERO_HILOS = 4;
     private static final int TIMEOUT = 30;
