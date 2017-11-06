@@ -117,16 +117,15 @@ public class RealizarSimulacion {
 	 * @throws ExcepcionContratacion
 	 *             Excepción controlada
 	 */
-	public Map<String, Object> realizarSimulacion(final DatosAlta oDatosAlta, 
-													final List<ProductoPolizas> lProductos,
-													final List<BeneficiarioPolizas> lBeneficiarios, 
-													final boolean desglosar,
-													final Map<String, Object> hmValores) throws Exception, ExcepcionContratacion {
+	public Map<String, Object> realizarSimulacion(final DatosAlta oDatosAlta, final List<ProductoPolizas> lProductos,
+			final List<BeneficiarioPolizas> lBeneficiarios, final boolean desglosar,
+			final Map<String, Object> hmValores) throws Exception, ExcepcionContratacion {
 		inicializarObjetosDeCalculo(hmValores);
 
 		Set<FrecuenciaEnum> frecuenciasTarificar = calcularFrecuenciasTarificar(oDatosAlta, lBeneficiarios, hmValores);
 
-		final TarificacionPoliza retornoPoliza = calcularRetornoPoliza(oDatosAlta, lProductos, lBeneficiarios, hmValores, frecuenciasTarificar);
+		final TarificacionPoliza retornoPoliza = calcularRetornoPoliza(oDatosAlta, lProductos, lBeneficiarios,
+				hmValores, frecuenciasTarificar);
 
 		List<String> errores = ejecutarSimulacion(oDatosAlta, frecuenciasTarificar, retornoPoliza);
 
