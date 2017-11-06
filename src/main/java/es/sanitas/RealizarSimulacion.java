@@ -74,8 +74,8 @@ public class RealizarSimulacion {
 	
     private static final Logger LOG = LoggerFactory.getLogger( RealizarSimulacion.class );
 
-    private static final String DATE_FORMAT = "dd/MM/yyyy";
     private static final String LINE_BREAK = "<br/>";
+    private static final String DATE_FORMAT = "dd/MM/yyyy";
 
     private static final int NUMERO_HILOS = 4;
     private static final int TIMEOUT = 30;
@@ -120,10 +120,10 @@ public class RealizarSimulacion {
      *             Excepción controlada
      */
     public Map< String, Object > realizarSimulacion( final DatosAlta oDatosAlta,
-            										 final List< ProductoPolizas > lProductos, 
-            										 final List< BeneficiarioPolizas > lBeneficiarios,
-            										 final boolean desglosar, 
-            										 final Map< String, Object > hmValores ) throws Exception, ExcepcionContratacion {
+						     final List< ProductoPolizas > lProductos, 
+						     final List< BeneficiarioPolizas > lBeneficiarios,
+						     final boolean desglosar, 
+						     final Map< String, Object > hmValores ) throws Exception, ExcepcionContratacion {
     	inicializarObjetosDeCalculo(hmValores);
 
         Set<FrecuenciaEnum> frecuenciasTarificar = calcularFrecuenciasTarificar(oDatosAlta, lBeneficiarios, hmValores);
@@ -342,8 +342,8 @@ public class RealizarSimulacion {
 	}
 
     protected es.sanitas.seg.simulacionpoliza.services.api.simulacion.vo.Beneficiario[] obtenerBeneficiarios(
-            final DatosAlta oDatosAlta, final List< ProductoPolizas > lProductos,
-            final List< BeneficiarioPolizas > lBeneficiarios, final DatosContratacionPlan oDatosPlan ) {
+        final DatosAlta oDatosAlta, final List< ProductoPolizas > lProductos,
+        final List< BeneficiarioPolizas > lBeneficiarios, final DatosContratacionPlan oDatosPlan ) {
         final List< es.sanitas.seg.simulacionpoliza.services.api.simulacion.vo.Beneficiario > beneficiarios = new ArrayList< es.sanitas.seg.simulacionpoliza.services.api.simulacion.vo.Beneficiario >();
 
         // Si hay lista de beneficiarios se trata de una inclusion de beneficiarios
